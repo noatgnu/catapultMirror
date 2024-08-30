@@ -1,4 +1,10 @@
 
 .idea
-
+.db
 .exe
+.json
+*.exe
+*.json
+Dockerfile
+*.db
+Dockerfile

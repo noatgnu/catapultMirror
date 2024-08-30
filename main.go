@@ -9,17 +9,19 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // Configuration struct to hold the JSON configuration
 type Configuration struct {
-	Directories   []string      `json:"directories"`
-	Destination   string        `json:"destination"`
-	CheckInterval time.Duration `json:"check_interval"`
+	Directories   []string `json:"directories"`
+	Destination   string   `json:"destination"`
+	CheckInterval string   `json:"check_interval"`
 }
 
 // Create a template configuration file
@@ -27,7 +29,7 @@ func createTemplateConfig(filePath string) error {
 	templateConfig := Configuration{
 		Directories:   []string{"exampleDir1", "exampleDir2"},
 		Destination:   "exampleDestinationDir",
-		CheckInterval: 1 * time.Minute,
+		CheckInterval: "1m",
 	}
 
 	file, err := os.Create(filePath)
@@ -44,17 +46,17 @@ func createTemplateConfig(filePath string) error {
 // Initialize the SQLite database
 func initDB(dbPath string) (*sql.DB, error) {
 	// Create the database file if it does not exist
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create the table if it does not exist
 	createTableSQL := `CREATE TABLE IF NOT EXISTS file_sizes (
-    path TEXT PRIMARY KEY,
-    size INTEGER,
-    copied BOOLEAN DEFAULT 0
-  );`
+		path TEXT PRIMARY KEY,
+		size INTEGER,
+		copied BOOLEAN DEFAULT 0
+	);`
 	_, err = db.Exec(createTableSQL)
 	if err != nil {
 		return nil, err
@@ -107,7 +109,7 @@ func listFiles(root string) ([]string, error) {
 func isFileCompleted(db *sql.DB, filePath string, duration time.Duration) bool {
 	initialSize, err := getFileSizeFromDB(db, filePath)
 	if err != nil {
-		fmt.Println("Error getting file size from DB:", err)
+		logWithDatetime("Error getting file size from DB:", err)
 		return false
 	}
 
@@ -141,6 +143,11 @@ func copyFile(src, dst string) error {
 	}
 	defer sourceFile.Close()
 
+	// Create the necessary directories in the destination path
+	if err := os.MkdirAll(filepath.Dir(dstPart), os.ModePerm); err != nil {
+		return err
+	}
+
 	destinationFile, err := os.Create(dstPart)
 	if err != nil {
 		return err
@@ -170,10 +177,10 @@ func copyFile(src, dst string) error {
 
 		copiedSize += int64(n)
 		progress := float64(copiedSize) / float64(totalSize) * 100
-		fmt.Printf("\rCopying %s: %.2f%% complete", src, progress)
+		logWithDatetime(fmt.Sprintf("Copying %s: %.2f%% complete", src, progress))
 	}
 
-	fmt.Println() // New line after progress is complete
+	logWithDatetime("") // New line after progress is complete
 	return nil
 }
 
@@ -205,65 +212,94 @@ func isFileCopied(db *sql.DB, filePath string) (bool, error) {
 }
 
 // Monitor directories and mirror completed files
-// Monitor directories and mirror completed files
-func monitorAndMirror(db *sql.DB, directories []string, destination string, checkInterval time.Duration) {
-	for {
-		for _, dir := range directories {
-			files, err := listFiles(dir)
-			if err != nil {
-				fmt.Println("Error listing files:", err)
-				continue
-			}
+func monitorAndMirror(db *sql.DB, directories []string, destination string, checkInterval string) {
+	duration, err := time.ParseDuration(checkInterval)
+	if err != nil {
+		logWithDatetime("Invalid check_interval:", err)
+		return
+	}
 
-			for _, file := range files {
-				copied, err := isFileCopied(db, file)
-				if err != nil {
-					fmt.Println("Error checking if file is copied:", err)
-					continue
-				}
-				if copied {
-					continue
-				}
+	// Channel to listen for OS signals
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
 
-				if isFileCompleted(db, file, checkInterval) {
-					destPath := filepath.Join(destination, filepath.Base(file))
-					err := copyFile(file, destPath)
+	// Channel to signal the end of the monitoring loop
+	done := make(chan bool)
+
+	go func() {
+		for {
+			select {
+			case <-shutdown:
+				logWithDatetime("Received shutdown signal")
+				done <- true
+				return
+			default:
+				for _, dir := range directories {
+					files, err := listFiles(dir)
 					if err != nil {
-						fmt.Println("Error copying file:", err)
-					} else {
-						fmt.Println("Copied file:", file, "to", destPath+".cat.part")
+						logWithDatetime("Error listing files:", err)
+						continue
+					}
 
-						// Verify SHA-256 hash
-						originalHash, err := calculateFileHash(file)
+					for _, file := range files {
+						copied, err := isFileCopied(db, file)
 						if err != nil {
-							fmt.Println("Error calculating hash for original file:", err)
+							logWithDatetime("Error checking if file is copied:", err)
+							continue
+						}
+						if copied {
 							continue
 						}
 
-						copiedHash, err := calculateFileHash(destPath + ".cat.part")
-						if err != nil {
-							fmt.Println("Error calculating hash for copied file:", err)
-							continue
-						}
-
-						if originalHash == copiedHash {
-							err := os.Rename(destPath+".cat.part", destPath)
+						if isFileCompleted(db, file, duration) {
+							relPath, err := filepath.Rel(dir, file)
 							if err != nil {
-								fmt.Println("Error renaming file:", err)
-							} else {
-								fmt.Println("File verified and renamed:", destPath)
-								markFileAsCopied(db, file)
+								logWithDatetime("Error getting relative path:", err)
+								continue
 							}
-						} else {
-							fmt.Println("File hash mismatch for:", file)
-							os.Remove(destPath + ".cat.part")
+							destPath := filepath.Join(destination, relPath)
+							err = copyFile(file, destPath)
+							if err != nil {
+								logWithDatetime("Error copying file:", err)
+							} else {
+								logWithDatetime(fmt.Sprintf("Copied file: %s to %s.cat.part", file, destPath))
+
+								// Verify SHA-256 hash
+								originalHash, err := calculateFileHash(file)
+								if err != nil {
+									logWithDatetime("Error calculating hash for original file:", err)
+									continue
+								}
+
+								copiedHash, err := calculateFileHash(destPath + ".cat.part")
+								if err != nil {
+									logWithDatetime("Error calculating hash for copied file:", err)
+									continue
+								}
+
+								if originalHash == copiedHash {
+									err := os.Rename(destPath+".cat.part", destPath)
+									if err != nil {
+										logWithDatetime("Error renaming file:", err)
+									} else {
+										logWithDatetime(fmt.Sprintf("File verified and renamed: %s", destPath))
+										markFileAsCopied(db, file)
+									}
+								} else {
+									logWithDatetime(fmt.Sprintf("File hash mismatch for: %s", file))
+									os.Remove(destPath + ".cat.part")
+								}
+							}
 						}
 					}
 				}
+				time.Sleep(duration)
 			}
 		}
-		time.Sleep(checkInterval)
-	}
+	}()
+
+	<-done
+	logWithDatetime("Shutting down gracefully")
 }
 
 // Read configuration from a JSON file
@@ -277,7 +313,23 @@ func readConfigFromFile(filePath string) (Configuration, error) {
 
 	decoder := json.NewDecoder(file)
 	err = decoder.Decode(&config)
-	return config, err
+	if err != nil {
+		return config, err
+	}
+
+	// Parse the check_interval string into a time.Duration
+	duration, err := time.ParseDuration(config.CheckInterval)
+	if err != nil {
+		return config, fmt.Errorf("invalid check_interval: %v", err)
+	}
+
+	config.CheckInterval = duration.String()
+	return config, nil
+}
+
+// Log messages with datetime
+func logWithDatetime(v ...interface{}) {
+	fmt.Println(append([]interface{}{time.Now().Format("2006-01-02 15:04:05")}, v...)...)
 }
 
 func main() {
@@ -286,29 +338,29 @@ func main() {
 	flag.Parse()
 
 	if *configFile == "" {
-		fmt.Println("Usage: catapultMirror -config=<config_file> -db=<db_file>")
+		logWithDatetime("Usage: catapultMirror -config=<config_file> -db=<db_file>")
 		return
 	}
 
 	if _, err := os.Stat(*configFile); os.IsNotExist(err) {
 		err := createTemplateConfig(*configFile)
 		if err != nil {
-			fmt.Println("Error creating template configuration file:", err)
+			logWithDatetime("Error creating template configuration file:", err)
 			return
 		}
-		fmt.Printf("Template configuration file created at %s. Please fill in the file and start again.\n", *configFile)
+		logWithDatetime(fmt.Sprintf("Template configuration file created at %s. Please fill in the file and start again.", *configFile))
 		return
 	}
 
 	config, err := readConfigFromFile(*configFile)
 	if err != nil {
-		fmt.Println("Error reading configuration file:", err)
+		logWithDatetime("Error reading configuration file:", err)
 		return
 	}
 
 	db, err := initDB(*dbPath)
 	if err != nil {
-		fmt.Println("Error initializing database:", err)
+		logWithDatetime("Error initializing database:", err)
 		return
 	}
 	defer db.Close()
