@@ -1,90 +1,99 @@
-# CatapultMirror
+# Catapult Mirror
 
-CatapultMirror is a Go-based tool for monitoring directories and mirroring completed files to a destination directory. It uses an SQLite database to keep track of whether a file has been copied or not, ensuring efficient file management.
+Catapult Mirror is a Go application that monitors specified directories and mirrors completed files to a destination directory. It ensures that files are fully copied and verified before being moved to their final destination.
 
 ## Features
 
-- Monitors specified directories for completed files.
-- Copies files to a destination directory with a `.cat.part` suffix.
-- Verifies the integrity of copied files using SHA-256 hash comparison.
-- Renames files to remove the `.cat.part` suffix upon successful verification.
-- Deletes the `.cat.part` file if the hash comparison fails.
-- Displays copy progress in the terminal.
-
-## Prerequisites
-
-- Go 1.16 or later
-- SQLite3
-
-## Installation
-
-1. Clone the repository:
-
-   ```sh
-   git clone https://github.com/yourusername/catapultmirror.git
-   cd catapultmirror
-   ```
-
-2. Build the project:
-
-   ```sh
-   go build -o catapultMirror main.go
-   ```
-
-## Usage
-
-1. Create a configuration file:
-
-   If the configuration file does not exist, the program will create a template configuration file for you. Run the following command to generate the template:
-
-   ```sh
-   ./catapultMirror -config=config.json
-   ```
-
-   Fill in the `config.json` file with the directories you want to monitor, the destination directory, and the check interval.
-
-2. Run the program:
-
-   ```sh
-   ./catapultMirror -config=config.json -db=file_sizes.db
-   ```
-
-    - `-config`: Path to the JSON configuration file.
-    - `-db`: Path to the SQLite database file.
+- Monitors multiple directories for new files.
+- Copies completed files to a destination directory.
+- Verifies file integrity using SHA-256 hash.
+- Logs important events to both console and a log file.
+- Gracefully shuts down on receiving OS signals or when disk space is low.
+- Deletes partially copied files on shutdown.
 
 ## Configuration
 
-The configuration file (`config.json`) should be in the following format:
+The application is configured using a JSON file. Below is an example configuration:
 
 ```json
 {
-  "directories": ["exampleDir1", "exampleDir2"],
-  "destination": "exampleDestinationDir",
-  "check_interval": "1m"
+    "directories": ["D:/watch_folder/MRC-Astral"],
+    "destination": "D:/watch_folder",
+    "check_interval": "5s",
+    "min_free_space": 10485760000
 }
 ```
 
 - `directories`: List of directories to monitor.
 - `destination`: Directory where completed files will be copied.
-- `check_interval`: Interval for checking file completion (e.g., `1m` for 1 minute).
+- `check_interval`: Interval at which directories are checked for new files.
+- `min_free_space`: Minimum free space (in bytes) required on the destination drive.
 
-## Example
+## Usage
 
-1. Create a configuration file `config.json`:
+### Command Line
 
-   ```json
-   {
-     "directories": ["/path/to/sourceDir1", "/path/to/sourceDir2"],
-     "destination": "/path/to/destinationDir",
-     "check_interval": "1m"
-   }
-   ```
+```sh
+catapultMirror -config=<config_file> -db=<db_file> -log=<log_file>
+```
 
-2. Run the program:
+- `-config`: Path to the JSON configuration file.
+- `-db`: Path to the SQLite database file.
+- `-log`: Path to the log file.
 
-   ```sh
-   ./catapultMirror -config=config.json -db=file_sizes.db
-   ```
+### Example
+
+```sh
+catapultMirror -config=config.json -db=file_sizes.db -log=transfer.log
+```
+
+## Logging
+
+The application logs important events to both the console and a log file. The log file does not record transfer progress but only what has finished transferring.
+
+## Building
+
+### GitHub Actions
+
+The project includes a GitHub Actions workflow to build and release binaries for multiple platforms.
+
+#### Workflow File: `.github/workflows/release.yaml`
+
+```yaml
+on:
+  release:
+    types: [created]
+
+permissions:
+    contents: write
+    packages: write
+
+jobs:
+  releases-matrix:
+    name: Release Go Binary
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: ["386", amd64, arm64]
+        exclude:
+          - goarch: "386"
+            goos: darwin
+          - goarch: arm64
+            goos: windows
+    steps:
+    - uses: actions/checkout@v4
+    - uses: wangyoucao577/go-release-action@v1
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        goos: ${{ matrix.goos }}
+        goarch: ${{ matrix.goarch }}
+        goversion: "https://dl.google.com/go/go1.23.0.linux-amd64.tar.gz"
+        project_path: "."
+        binary_name: "catapultMirror"
+        extra_files: LICENSE README.md
+        build_flags: ${{ matrix.goos == 'windows' && '-tags windows' || '' }}
+```
 
 ## License
 
