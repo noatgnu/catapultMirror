@@ -2,9 +2,11 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"sync"
 
 	"github.com/noatgnu/catapultMirror/catapult"
 )
@@ -38,7 +40,7 @@ func main() {
 		return
 	}
 
-	config, err := catapult.ReadConfigFromFile(*configFile)
+	configs, err := catapult.ReadConfigsFromFile(*configFile)
 	if err != nil {
 		catapult.LogWithDatetime("Error reading configuration file:", err)
 		return
@@ -51,13 +53,30 @@ func main() {
 	}
 	defer db.Close()
 
-	freeSpace, err := catapult.GetFreeSpace(config.Destination)
-	if err != nil {
-		catapult.LogWithDatetime("Error getting free space:", err)
-		return
+	// Initialize Slack with the configurations
+	catapult.InitSlack(configs)
+
+	var wg sync.WaitGroup
+
+	for _, config := range configs.Configs {
+		wg.Add(1)
+		go func(config catapult.Configuration) {
+			defer wg.Done()
+
+			freeSpace, err := catapult.GetFreeSpace(config.Destination)
+			if err != nil {
+				catapult.LogWithDatetime("Error getting free space:", err)
+				return
+			}
+
+			catapult.LogWithDatetime(fmt.Sprintf("Destination free space for %s: %.2f MB", config.Name, float64(freeSpace)/1024/1024))
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+
+			catapult.MonitorAndMirror(ctx, db, configs)
+		}(config)
 	}
 
-	catapult.LogWithDatetime(fmt.Sprintf("Destination free space: %.2f MB", float64(freeSpace)/1024/1024))
-
-	catapult.MonitorAndMirror(db, config.Directories, config.Destination, config.CheckInterval, config.MinFreeSpace)
+	wg.Wait()
 }

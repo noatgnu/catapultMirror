@@ -8,10 +8,17 @@ import (
 )
 
 type Configuration struct {
+	Name          string   `json:"name"`
 	Directories   []string `json:"directories"`
 	Destination   string   `json:"destination"`
 	CheckInterval string   `json:"check_interval"`
 	MinFreeSpace  int64    `json:"min_free_space"`
+}
+
+type Configurations struct {
+	Configs        []Configuration `json:"configs"`
+	SlackToken     string          `json:"slack_token,omitempty"`
+	SlackChannelID string          `json:"slack_channel_id,omitempty"`
 }
 
 func CreateTemplateConfig(filePath string) error {
@@ -54,4 +61,17 @@ func ReadConfigFromFile(filePath string) (Configuration, error) {
 
 	config.CheckInterval = duration.String()
 	return config, nil
+}
+
+func ReadConfigsFromFile(filePath string) (Configurations, error) {
+	var configs Configurations
+	file, err := os.Open(filePath)
+	if err != nil {
+		return configs, err
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&configs)
+	return configs, err
 }

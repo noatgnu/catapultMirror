@@ -1,33 +1,52 @@
 # Catapult Mirror
 
-Catapult Mirror is a Go application that monitors specified directories and mirrors completed files to a destination directory. It ensures that files are fully copied and verified before being moved to their final destination.
+Catapult Mirror is a tool designed to monitor directories and mirror files to a destination directory. It includes features such as Slack notifications and database tracking of copied files.
 
 ## Features
 
-- Monitors multiple directories for new files.
-- Copies completed files to a destination directory.
-- Verifies file integrity using SHA-256 hash.
-- Logs important events to both console and a log file.
-- Gracefully shuts down on receiving OS signals or when disk space is low.
-- Deletes partially copied files on shutdown.
+- **Directory Monitoring**: Monitors specified directories for new files.
+- **File Mirroring**: Copies files from source directories to a destination directory.
+- **Slack Notifications**: Sends notifications to a Slack channel for various events.
+- **Database Tracking**: Tracks copied files in an SQLite database to avoid duplicate copying.
+- **Configurable via JSON**: Uses a JSON configuration file for easy setup.
 
 ## Configuration
 
-The application is configured using a JSON file. Below is an example configuration:
+The configuration is done via a JSON file. Below is an example configuration:
 
 ```json
 {
-    "directories": ["D:/watch_folder/MRC-Astral"],
-    "destination": "D:/watch_folder",
-    "check_interval": "5s",
-    "min_free_space": 10485760000
+    "configs": [
+        {
+            "name": "MRC-Astral",
+            "directories": ["D:/watch_folder/MRC-Astral"],
+            "destination": "D:/watch_folder",
+            "check_interval": "5s",
+            "min_free_space": 10485760000
+        }
+    ],
+    "slack_token": "",
+    "slack_channel_id": ""
 }
 ```
 
-- `directories`: List of directories to monitor.
-- `destination`: Directory where completed files will be copied.
-- `check_interval`: Interval at which directories are checked for new files.
-- `min_free_space`: Minimum free space (in bytes) required on the destination drive.
+### Configuration Fields
+
+- **configs**: An array of configuration objects for each directory to monitor.
+    - **name**: A name for the configuration.
+    - **directories**: An array of directories to monitor.
+    - **destination**: The destination directory where files will be copied.
+    - **check_interval**: The interval at which to check the directories for new files.
+    - **min_free_space**: The minimum free space required in the destination directory (in bytes).
+- **slack_token**: (Optional) The Slack token for sending notifications.
+- **slack_channel_id**: (Optional) The Slack channel ID where notifications will be sent.
+
+## Environment Variables
+
+If the `slack_token` and `slack_channel_id` are not provided in the configuration file, the application will look for the following environment variables:
+
+- `SLACK_TOKEN`
+- `SLACK_CHANNEL_ID`
 
 ## Usage
 
@@ -49,7 +68,7 @@ catapultMirror -config=config.json -db=file_sizes.db -log=transfer.log
 
 ## Logging
 
-The application logs important events to both the console and a log file. The log file does not record transfer progress but only what has finished transferring.
+The application logs important events to both the console and a log file.
 
 ## Building
 
@@ -93,6 +112,14 @@ jobs:
         binary_name: "catapultMirror"
         extra_files: LICENSE README.md
         build_flags: ${{ matrix.goos == 'windows' && '-tags windows' || '' }}
+```
+
+## Running Tests
+
+To run the tests, use the following command:
+
+```sh
+go test ./...
 ```
 
 ## License

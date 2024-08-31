@@ -1,3 +1,4 @@
+// catapult/file_operations.go
 package catapult
 
 import (
@@ -35,12 +36,16 @@ func IsFileCompleted(db *sql.DB, filePath string, duration time.Duration) bool {
 
 	if initialSize == -1 {
 		initialSize = GetFileSize(filePath)
+		dbMutex.Lock()
 		SaveFileSize(db, filePath, initialSize)
+		dbMutex.Unlock()
 	}
 
 	time.Sleep(duration)
 	finalSize := GetFileSize(filePath)
+	dbMutex.Lock()
 	SaveFileSize(db, filePath, finalSize)
+	dbMutex.Unlock()
 
 	return initialSize == finalSize
 }

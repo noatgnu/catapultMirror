@@ -8,7 +8,7 @@ import (
 )
 
 func setupTestDB(t *testing.T) *sql.DB {
-	db, err := sql.Open("sqlite", ":memory:")
+	db, err := sql.Open("sqlite", "file:/foobar?vfs=memdb")
 	if err != nil {
 		t.Fatalf("sql.Open() error: %v", err)
 	}

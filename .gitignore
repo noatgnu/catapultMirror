@@ -8,3 +8,4 @@
 Dockerfile
 *.db
 Dockerfile
+*.log

@@ -6,120 +6,138 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
+	"sync"
 	"time"
 )
 
-func MonitorAndMirror(db *sql.DB, directories []string, destination string, checkInterval string, minFreeSpace int64) {
-	duration, err := time.ParseDuration(checkInterval)
-	if err != nil {
-		LogWithDatetime("Invalid check_interval:", err)
-		return
-	}
+var dbMutex sync.Mutex
 
-	shutdown := make(chan os.Signal, 1)
-	signal.Notify(shutdown, syscall.SIGINT, syscall.SIGTERM)
+func MonitorAndMirror(ctx context.Context, db *sql.DB, config Configurations) {
+	InitSlack(config)
 
-	done := make(chan bool)
-	ctx, cancel := context.WithCancel(context.Background())
+	for _, cfg := range config.Configs {
+		duration, err := time.ParseDuration(cfg.CheckInterval)
+		if err != nil {
+			LogWithDatetime("Invalid check_interval:", err)
+			sendSlackNotification(fmt.Sprintf("Invalid check_interval: %v", err))
+			return
+		}
+		ticker := time.NewTicker(duration)
+		defer ticker.Stop()
 
-	go func() {
-		for {
-			select {
-			case <-shutdown:
-				LogWithDatetime("Received shutdown signal")
-				cancel()
-				done <- true
-				return
-			default:
-				freeSpace, err := GetFreeSpace(destination)
-				if err != nil {
-					LogWithDatetime("Error getting free space:", err)
+		done := make(chan bool)
+
+		go func(cfg Configuration) {
+			for {
+				select {
+				case <-ctx.Done():
+					LogWithDatetime("Shutting down monitoring")
 					done <- true
 					return
-				}
-
-				if freeSpace <= minFreeSpace {
-					LogWithDatetime("No space left at destination. Shutting down gracefully.")
-					cancel()
-					done <- true
-					return
-				}
-
-				for _, dir := range directories {
-					files, err := ListFiles(dir)
+				case <-ticker.C:
+					LogWithDatetime(fmt.Sprintf("Checking free space for destination: %s", cfg.Destination))
+					freeSpace, err := GetFreeSpace(cfg.Destination)
 					if err != nil {
-						LogWithDatetime("Error listing files:", err)
-						continue
+						LogWithDatetime("Error getting free space:", err)
+						sendSlackNotification(fmt.Sprintf("Error getting free space: %v", err))
+						done <- true
+						return
 					}
 
-					for _, file := range files {
-						copied, err := IsFileCopied(db, file)
+					if freeSpace <= cfg.MinFreeSpace {
+						LogWithDatetime("No space left at destination. Shutting down gracefully.")
+						sendSlackNotification("No space left at destination. Shutting down gracefully.")
+						done <- true
+						return
+					}
+
+					for _, dir := range cfg.Directories {
+						LogWithDatetime(fmt.Sprintf("Listing files in directory: %s", dir))
+						files, err := ListFiles(dir)
 						if err != nil {
-							LogWithDatetime("Error checking if file is copied:", err)
-							continue
-						}
-						if copied {
+							LogWithDatetime("Error listing files:", err)
+							sendSlackNotification(fmt.Sprintf("Error listing files: %v", err))
 							continue
 						}
 
-						if IsFileCompleted(db, file, duration) {
-							relPath, err := filepath.Rel(dir, file)
+						for _, file := range files {
+
+							copied, err := IsFileCopied(db, file)
 							if err != nil {
-								LogWithDatetime("Error getting relative path:", err)
+								LogWithDatetime("Error checking if file is copied:", err)
+								sendSlackNotification(fmt.Sprintf("Error checking if file is copied: %v", err))
 								continue
 							}
-							destPath := filepath.Join(destination, relPath)
-
-							fileSize := GetFileSize(file)
-							if freeSpace-fileSize <= minFreeSpace {
-								LogWithDatetime("File size will breach minimum free space. Shutting down gracefully.")
-								cancel()
-								done <- true
-								return
+							if copied {
+								continue
 							}
 
-							_, err = CopyFile(ctx, file, destPath)
-							if err != nil {
-								LogWithDatetime("Error copying file:", err)
-							} else {
-								LogWithDatetime(fmt.Sprintf("Copied file: %s to %s.cat.part", file, destPath))
-
-								originalHash, err := CalculateFileHash(file)
+							if IsFileCompleted(db, file, duration) {
+								relPath, err := filepath.Rel(dir, file)
 								if err != nil {
-									LogWithDatetime("Error calculating hash for original file:", err)
+									LogWithDatetime("Error getting relative path:", err)
+									sendSlackNotification(fmt.Sprintf("Error getting relative path: %v", err))
 									continue
 								}
+								destPath := filepath.Join(cfg.Destination, relPath)
 
-								copiedHash, err := CalculateFileHash(destPath + ".cat.part")
-								if err != nil {
-									LogWithDatetime("Error calculating hash for copied file:", err)
-									continue
+								fileSize := GetFileSize(file)
+								if freeSpace-fileSize <= cfg.MinFreeSpace {
+									LogWithDatetime("File size will breach minimum free space. Shutting down gracefully.")
+									sendSlackNotification("File size will breach minimum free space. Shutting down gracefully.")
+									done <- true
+									return
 								}
 
-								if originalHash == copiedHash {
-									err := os.Rename(destPath+".cat.part", destPath)
-									if err != nil {
-										LogWithDatetime("Error renaming file:", err)
-									} else {
-										LogWithDatetime(fmt.Sprintf("File verified and renamed: %s", destPath))
-										MarkFileAsCopied(db, file)
-									}
+								sendSlackNotification(fmt.Sprintf("Starting to copy file: %s", file))
+								_, err = CopyFile(ctx, file, destPath)
+								if err != nil {
+									LogWithDatetime("Error copying file:", err)
+									sendSlackNotification(fmt.Sprintf("Error copying file: %v", err))
 								} else {
-									LogWithDatetime(fmt.Sprintf("File hash mismatch for: %s", file))
-									os.Remove(destPath + ".cat.part")
+									LogWithDatetime(fmt.Sprintf("Copied file: %s to %s.cat.part", file, destPath))
+
+									originalHash, err := CalculateFileHash(file)
+									if err != nil {
+										LogWithDatetime("Error calculating hash for original file:", err)
+										sendSlackNotification(fmt.Sprintf("Error calculating hash for original file: %v", err))
+										continue
+									}
+
+									copiedHash, err := CalculateFileHash(destPath + ".cat.part")
+									if err != nil {
+										LogWithDatetime("Error calculating hash for copied file:", err)
+										sendSlackNotification(fmt.Sprintf("Error calculating hash for copied file: %v", err))
+										continue
+									}
+
+									if originalHash == copiedHash {
+										err := os.Rename(destPath+".cat.part", destPath)
+										if err != nil {
+											LogWithDatetime("Error renaming file:", err)
+											sendSlackNotification(fmt.Sprintf("Error renaming file: %v", err))
+										} else {
+											LogWithDatetime(fmt.Sprintf("File verified and renamed: %s", destPath))
+											sendSlackNotification(fmt.Sprintf("Finished copying file: %s", destPath))
+											dbMutex.Lock()
+											MarkFileAsCopied(db, file)
+											dbMutex.Unlock()
+										}
+									} else {
+										LogWithDatetime(fmt.Sprintf("File hash mismatch for: %s", file))
+										sendSlackNotification(fmt.Sprintf("File hash mismatch for: %s", file))
+										os.Remove(destPath + ".cat.part")
+									}
 								}
 							}
 						}
 					}
 				}
-				time.Sleep(duration)
 			}
-		}
-	}()
+		}(cfg)
 
-	<-done
-	LogWithDatetime("Shutting down gracefully")
+		<-done
+		LogWithDatetime("Shutting down gracefully")
+	}
 }
