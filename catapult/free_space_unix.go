@@ -1,15 +1,15 @@
-// free_space_unix.go
+// catapult/free_space_unix.go
 //go:build !windows
 // +build !windows
 
-package main
+package catapult
 
 import (
 	"golang.org/x/sys/unix"
 )
 
 // Get the available free space on Unix-based systems
-func getFreeSpace(path string) (int64, error) {
+func GetFreeSpace(path string) (int64, error) {
 	var stat unix.Statfs_t
 	if err := unix.Statfs(path, &stat); err != nil {
 		return 0, err

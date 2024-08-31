@@ -1,4 +1,4 @@
-module catapultMirror
+module github.com/noatgnu/catapultMirror
 
 go 1.23.0
 
