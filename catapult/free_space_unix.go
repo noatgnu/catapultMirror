@@ -8,7 +8,15 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// Get the available free space on Unix-based systems
+// GetFreeSpace returns the available free space on Unix-based systems for the given path.
+// It uses the Unix `statfs` system call to retrieve the file system statistics.
+//
+// Parameters:
+// - path: The directory path to check the free space for.
+//
+// Returns:
+// - int64: The available free space in bytes.
+// - error: An error object if there was an issue retrieving the free space.
 func GetFreeSpace(path string) (int64, error) {
 	var stat unix.Statfs_t
 	if err := unix.Statfs(path, &stat); err != nil {

@@ -21,8 +21,16 @@ type Configurations struct {
 	SlackChannelID string          `json:"slack_channel_id,omitempty"`
 }
 
+// CreateTemplateConfig creates a template configuration file with example values.
+//
+// Parameters:
+// - filePath: The path where the template configuration file will be created.
+//
+// Returns:
+// - error: An error object if there was an issue creating the file.
 func CreateTemplateConfig(filePath string) error {
 	templateConfig := Configuration{
+		Name:          "ExampleConfig",
 		Directories:   []string{"exampleDir1", "exampleDir2"},
 		Destination:   "exampleDestinationDir",
 		CheckInterval: "1m",
@@ -40,6 +48,14 @@ func CreateTemplateConfig(filePath string) error {
 	return encoder.Encode(templateConfig)
 }
 
+// ReadConfigFromFile reads a single configuration from a file.
+//
+// Parameters:
+// - filePath: The path of the configuration file to read.
+//
+// Returns:
+// - Configuration: The configuration read from the file.
+// - error: An error object if there was an issue reading the file.
 func ReadConfigFromFile(filePath string) (Configuration, error) {
 	var config Configuration
 	file, err := os.Open(filePath)
@@ -63,6 +79,14 @@ func ReadConfigFromFile(filePath string) (Configuration, error) {
 	return config, nil
 }
 
+// ReadConfigsFromFile reads multiple configurations from a file.
+//
+// Parameters:
+// - filePath: The path of the configuration file to read.
+//
+// Returns:
+// - Configurations: The configurations read from the file.
+// - error: An error object if there was an issue reading the file.
 func ReadConfigsFromFile(filePath string) (Configurations, error) {
 	var configs Configurations
 	file, err := os.Open(filePath)

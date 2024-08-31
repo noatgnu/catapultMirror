@@ -13,6 +13,14 @@ import (
 	"time"
 )
 
+// ListFiles returns a list of all files in the given root directory and its subdirectories.
+//
+// Parameters:
+// - root: The root directory to list files from.
+//
+// Returns:
+// - []string: A slice of file paths.
+// - error: An error object if there was an issue listing the files.
 func ListFiles(root string) ([]string, error) {
 	var files []string
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
@@ -27,6 +35,15 @@ func ListFiles(root string) ([]string, error) {
 	return files, err
 }
 
+// IsFileCompleted checks if a file has completed writing by comparing its size over a specified duration.
+//
+// Parameters:
+// - db: The database connection to track file sizes.
+// - filePath: The path of the file to check.
+// - duration: The duration to wait before checking the file size again.
+//
+// Returns:
+// - bool: True if the file size has not changed, indicating the file is completed.
 func IsFileCompleted(db *sql.DB, filePath string, duration time.Duration) bool {
 	initialSize, err := GetFileSizeFromDB(db, filePath)
 	if err != nil {
@@ -50,6 +67,13 @@ func IsFileCompleted(db *sql.DB, filePath string, duration time.Duration) bool {
 	return initialSize == finalSize
 }
 
+// GetFileSize returns the size of the file at the given path.
+//
+// Parameters:
+// - filePath: The path of the file to get the size of.
+//
+// Returns:
+// - int64: The size of the file in bytes, or -1 if there was an error.
 func GetFileSize(filePath string) int64 {
 	fileInfo, err := os.Stat(filePath)
 	if err != nil {
@@ -58,6 +82,16 @@ func GetFileSize(filePath string) int64 {
 	return fileInfo.Size()
 }
 
+// CopyFile copies a file from the source path to the destination path, with support for context cancellation.
+//
+// Parameters:
+// - ctx: The context to control the file copying lifecycle.
+// - src: The source file path.
+// - dst: The destination file path.
+//
+// Returns:
+// - int64: The total size of the copied file in bytes.
+// - error: An error object if there was an issue copying the file.
 func CopyFile(ctx context.Context, src, dst string) (int64, error) {
 	dstPart := dst + ".cat.part"
 	sourceFile, err := os.Open(src)
@@ -116,6 +150,14 @@ copyLoop:
 	return totalSize, nil
 }
 
+// CalculateFileHash calculates the SHA-256 hash of the file at the given path.
+//
+// Parameters:
+// - filePath: The path of the file to calculate the hash for.
+//
+// Returns:
+// - string: The SHA-256 hash of the file in hexadecimal format.
+// - error: An error object if there was an issue calculating the hash.
 func CalculateFileHash(filePath string) (string, error) {
 	file, err := os.Open(filePath)
 	if err != nil {
