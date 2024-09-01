@@ -23,9 +23,17 @@ var dbMutex sync.Mutex
 func MonitorAndMirror(ctx context.Context, db *sql.DB, config Configurations) {
 	InitSlack(config)
 
+	var wg sync.WaitGroup
+
 	for _, cfg := range config.Configs {
-		go monitorDirectory(ctx, db, cfg)
+		wg.Add(1)
+		go func(cfg Configuration) {
+			defer wg.Done()
+			monitorDirectory(ctx, db, cfg)
+		}(cfg)
 	}
+
+	wg.Wait()
 }
 
 // monitorDirectory monitors a single directory for new files and processes them at specified intervals.
@@ -66,6 +74,7 @@ func monitorDirectory(ctx context.Context, db *sql.DB, cfg Configuration) {
 			}
 
 			for _, dir := range cfg.Directories {
+				fmt.Printf("Processing directory: %s\n", dir)
 				processFiles(ctx, db, dir, cfg, freeSpace, duration)
 			}
 		}
@@ -92,6 +101,11 @@ func processFiles(ctx context.Context, db *sql.DB, dir string, cfg Configuration
 	}
 
 	for _, file := range files {
+		// ignore empty files
+		if GetFileSize(file) == 0 {
+			LogWithDatetime(fmt.Sprintf("Ignoring empty file: %s", file))
+			continue
+		}
 		copied, err := IsFileCopied(db, file)
 		if err != nil {
 			LogWithDatetime("Error checking if file is copied:", err)

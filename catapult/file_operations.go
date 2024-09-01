@@ -93,7 +93,16 @@ func GetFileSize(filePath string) int64 {
 // - int64: The total size of the copied file in bytes.
 // - error: An error object if there was an issue copying the file.
 func CopyFile(ctx context.Context, src, dst string) (int64, error) {
+
 	dstPart := dst + ".cat.part"
+	// check if the file already exists
+	if _, err := os.Stat(dstPart); err == nil {
+		// file already exists, remove it
+		if err := os.Remove(dstPart); err != nil {
+			fmt.Printf("Error removing existing file: %v\n", err)
+			return 0, err
+		}
+	}
 	sourceFile, err := os.Open(src)
 	if err != nil {
 		return 0, err
@@ -125,6 +134,7 @@ copyLoop:
 			os.Remove(dstPart)
 			return 0, ctx.Err()
 		default:
+
 			n, err := sourceFile.Read(buffer)
 			if err != nil && err != io.EOF {
 				return 0, err
