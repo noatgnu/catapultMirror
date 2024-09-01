@@ -101,8 +101,14 @@ func processFiles(ctx context.Context, db *sql.DB, dir string, cfg Configuration
 	}
 
 	for _, file := range files {
-		// ignore empty files
-		if GetFileSize(file) == 0 {
+		fileSize := GetFileSize(file)
+		// Ignore files smaller than the minimum file size
+		if fileSize < cfg.MinFileSize {
+			LogWithDatetime(fmt.Sprintf("Ignoring file smaller than minimum size: %s", file))
+			continue
+		}
+		// Ignore empty files
+		if fileSize == 0 {
 			LogWithDatetime(fmt.Sprintf("Ignoring empty file: %s", file))
 			continue
 		}
@@ -140,6 +146,37 @@ func copyFileWithVerification(ctx context.Context, db *sql.DB, file, dir string,
 		return
 	}
 	destPath := filepath.Join(cfg.Destination, relPath)
+
+	// Check if the file already exists at the destination
+	if _, err := os.Stat(destPath); err == nil {
+		// File exists, calculate hashes
+		originalHash, err := CalculateFileHash(file)
+		if err != nil {
+			LogWithDatetime("Error calculating hash for original file:", err)
+			sendSlackNotification(fmt.Sprintf("Error calculating hash for original file: %v", err))
+			return
+		}
+
+		destinationHash, err := CalculateFileHash(destPath)
+		if err != nil {
+			LogWithDatetime("Error calculating hash for destination file:", err)
+			sendSlackNotification(fmt.Sprintf("Error calculating hash for destination file: %v", err))
+			return
+		}
+
+		if originalHash == destinationHash {
+			LogWithDatetime(fmt.Sprintf("File already exists and is identical: %s", destPath))
+			sendSlackNotification(fmt.Sprintf("File already exists and is identical: %s", destPath))
+			dbMutex.Lock()
+			MarkFileAsCopied(db, file)
+			dbMutex.Unlock()
+			return
+		} else {
+			LogWithDatetime(fmt.Sprintf("File already exists but is different: %s", destPath))
+			sendSlackNotification(fmt.Sprintf("File already exists but is different: %s", destPath))
+			return
+		}
+	}
 
 	fileSize := GetFileSize(file)
 	if freeSpace-fileSize <= cfg.MinFreeSpace {

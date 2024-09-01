@@ -22,7 +22,8 @@ The configuration is done via a JSON file. Below is an example configuration:
             "directories": ["D:/watch_folder/MRC-Astral"],
             "destination": "D:/watch_folder",
             "check_interval": "5s",
-            "min_free_space": 10485760000
+            "min_free_space": 10485760000,
+            "min_file_size": 10485760
         }
     ],
     "slack_token": "",
@@ -38,6 +39,7 @@ The configuration is done via a JSON file. Below is an example configuration:
     - **destination**: The destination directory where files will be copied.
     - **check_interval**: The interval at which to check the directories for new files.
     - **min_free_space**: The minimum free space required in the destination directory (in bytes).
+    - **min_file_size**: The minimum file size required to be copied (in bytes).
 - **slack_token**: (Optional) The Slack token for sending notifications.
 - **slack_channel_id**: (Optional) The Slack channel ID where notifications will be sent.
 
@@ -57,8 +59,8 @@ catapultMirror -config=<config_file> -db=<db_file> -log=<log_file>
 ```
 
 - `-config`: Path to the JSON configuration file.
-- `-db`: Path to the SQLite database file.
-- `-log`: Path to the log file.
+- `-db`: Path to the SQLite database file (optional).
+- `-log`: Path to the log file (optional).
 
 ### Example
 
