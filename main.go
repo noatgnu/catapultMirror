@@ -26,29 +26,29 @@ func main() {
 	defer catapult.LogFile.Close()
 
 	if *configFile == "" {
-		catapult.LogWithDatetime("Usage: catapultMirror -config=<config_file> -db=<db_file> -log=<log_file>")
+		catapult.LogWithDatetime("Usage: catapultMirror -config=<config_file> -db=<db_file> -log=<log_file>", false)
 		return
 	}
 
 	if _, err := os.Stat(*configFile); os.IsNotExist(err) {
 		err := catapult.CreateTemplateConfig(*configFile)
 		if err != nil {
-			catapult.LogWithDatetime("Error creating template configuration file:", err)
+			catapult.LogWithDatetime(fmt.Sprintf("Error creating template configuration file: %v", err), false)
 			return
 		}
-		catapult.LogWithDatetime(fmt.Sprintf("Template configuration file created at %s. Please fill in the file and start again.", *configFile))
+		catapult.LogWithDatetime(fmt.Sprintf("Template configuration file created at %s. Please fill in the file and start again.", *configFile), false)
 		return
 	}
 
 	configs, err := catapult.ReadConfigsFromFile(*configFile)
 	if err != nil {
-		catapult.LogWithDatetime("Error reading configuration file:", err)
+		catapult.LogWithDatetime(fmt.Sprintf("Error reading configuration file: %v", err), false)
 		return
 	}
 
 	db, err := catapult.InitDB(*dbPath)
 	if err != nil {
-		catapult.LogWithDatetime("Error initializing database:", err)
+		catapult.LogWithDatetime(fmt.Sprintf("Error initializing database: %v", err), false)
 		return
 	}
 	defer db.Close()
@@ -65,11 +65,11 @@ func main() {
 
 			freeSpace, err := catapult.GetFreeSpace(config.Destination)
 			if err != nil {
-				catapult.LogWithDatetime("Error getting free space:", err)
+				catapult.LogWithDatetime(fmt.Sprintf("Error getting free space: %v", err), false)
 				return
 			}
 
-			catapult.LogWithDatetime(fmt.Sprintf("Destination free space for %s: %.2f MB", config.Name, float64(freeSpace)/1024/1024))
+			catapult.LogWithDatetime(fmt.Sprintf("Destination free space for %s: %.2f MB", config.Name, float64(freeSpace)/1024/1024), false)
 
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

@@ -9,10 +9,11 @@ import (
 
 var LogFile *os.File
 
-func LogWithDatetime(v ...interface{}) {
-	message := fmt.Sprintln(append([]interface{}{time.Now().Format("2006-01-02 15:04:05")}, v...)...)
-	fmt.Print(message)
-	if LogFile != nil {
-		LogFile.WriteString(message)
+func LogWithDatetime(message string, logToFile bool) {
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	logMessage := fmt.Sprintf("%s: %s\n", timestamp, message)
+	fmt.Print(logMessage)
+	if logToFile && LogFile != nil {
+		LogFile.WriteString(logMessage)
 	}
 }

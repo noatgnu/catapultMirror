@@ -47,7 +47,7 @@ func ListFiles(root string) ([]string, error) {
 func IsFileCompleted(db *sql.DB, filePath string, duration time.Duration) bool {
 	initialSize, err := GetFileSizeFromDB(db, filePath)
 	if err != nil {
-		LogWithDatetime("Error getting file size from DB:", err)
+		LogWithDatetime(fmt.Sprintf("Error getting file size from DB: %v", err), true)
 		return false
 	}
 
@@ -155,8 +155,7 @@ copyLoop:
 		}
 	}
 
-	fmt.Printf("\nFinished copying %s to %s\n", src, dst)
-	LogWithDatetime(fmt.Sprintf("Finished copying %s to %s", src, dst))
+	LogWithDatetime(fmt.Sprintf("Finished copying %s to %s", src, dst), true)
 	return totalSize, nil
 }
 

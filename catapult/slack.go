@@ -2,6 +2,7 @@
 package catapult
 
 import (
+	"fmt"
 	"github.com/slack-go/slack"
 	"os"
 )
@@ -36,7 +37,7 @@ func sendSlackNotification(message string) {
 		slack.MsgOptionText(message, false),
 	)
 	if err != nil {
-		LogWithDatetime("Failed to send Slack notification:", err)
+		LogWithDatetime(fmt.Sprintf("Failed to send Slack notification: %v", err), false)
 	}
 }
 
@@ -44,9 +45,9 @@ func TestSlackCredentials(token string) bool {
 	client := slack.New(token)
 	authTest, err := client.AuthTest()
 	if err != nil {
-		LogWithDatetime("Failed to authenticate with Slack:", err)
+		LogWithDatetime(fmt.Sprintf("Failed to authenticate with Slack: %v", err), false)
 		return false
 	}
-	LogWithDatetime("Successfully authenticated with Slack. User ID:", authTest.UserID)
+	LogWithDatetime(fmt.Sprintf("Successfully authenticated with Slack. User ID: %v", authTest.UserID), false)
 	return true
 }
