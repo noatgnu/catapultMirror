@@ -4,6 +4,7 @@ package catapult
 import (
 	"encoding/json"
 	"os"
+	"time"
 )
 
 type Configuration struct {
@@ -14,7 +15,6 @@ type Configuration struct {
 	MinFreeSpace  int64    `json:"min_free_space"`
 	MinFileSize   int64    `json:"min_file_size"` // New field for minimum file size
 }
-
 type Configurations struct {
 	Configs        []Configuration `json:"configs"`
 	SlackToken     string          `json:"slack_token,omitempty"`
@@ -46,4 +46,56 @@ func CreateTemplateConfig(filePath string) error {
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
 	return encoder.Encode(templateConfig)
+}
+
+// ReadConfigFromFile reads a single configuration from a file.
+//
+// Parameters:
+// - filePath: The path of the configuration file to read.
+//
+// Returns:
+// - Configuration: The configuration read from the file.
+// - error: An error object if there was an issue reading the file.
+func ReadConfigFromFile(filePath string) (Configuration, error) {
+	var config Configuration
+	file, err := os.Open(filePath)
+	if err != nil {
+		return config, err
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&config)
+	if err != nil {
+		return config, err
+	}
+
+	duration, err := time.ParseDuration(config.CheckInterval)
+	if err != nil {
+		return config, err
+	}
+
+	config.CheckInterval = duration.String()
+	return config, nil
+}
+
+// ReadConfigsFromFile reads multiple configurations from a file.
+//
+// Parameters:
+// - filePath: The path of the configuration file to read.
+//
+// Returns:
+// - Configurations: The configurations read from the file.
+// - error: An error object if there was an issue reading the file.
+func ReadConfigsFromFile(filePath string) (Configurations, error) {
+	var configs Configurations
+	file, err := os.Open(filePath)
+	if err != nil {
+		return configs, err
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&configs)
+	return configs, err
 }
