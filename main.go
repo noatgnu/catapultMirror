@@ -17,13 +17,12 @@ func main() {
 	logFilePath := flag.String("log", "transfer.log", "Path to the log file")
 	flag.Parse()
 
-	var err error
-	catapult.LogFile, err = os.OpenFile(*logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	err := catapult.StartLogger(*logFilePath)
 	if err != nil {
-		fmt.Println("Error opening log file:", err)
+		fmt.Println(err)
 		return
 	}
-	defer catapult.LogFile.Close()
+	defer catapult.CloseLogger()
 
 	if *configFile == "" {
 		catapult.LogWithDatetime("Usage: catapultMirror -config=<config_file> -db=<db_file> -log=<log_file>", false)
