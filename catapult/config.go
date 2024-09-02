@@ -10,7 +10,7 @@ import (
 type Configuration struct {
 	Name          string   `json:"name"`
 	Directories   []string `json:"directories"`
-	Destination   string   `json:"destination"`
+	Destinations  []string `json:"destinations"`
 	CheckInterval string   `json:"check_interval"`
 	MinFreeSpace  int64    `json:"min_free_space"`
 	MinFileSize   int64    `json:"min_file_size"` // New field for minimum file size
@@ -31,10 +31,16 @@ type Configurations struct {
 func CreateTemplateConfig(filePath string) error {
 	templateConfig := Configuration{
 		Directories:   []string{"exampleDir1", "exampleDir2"},
-		Destination:   "exampleDestinationDir",
+		Destinations:  []string{"exampleDestinationDir", "exampleDestinationDir2"},
 		CheckInterval: "1m",
 		MinFreeSpace:  10000 * 1024 * 1024, // 10 GB
 		MinFileSize:   1024 * 1024,         // 1 MB
+	}
+
+	templateConfigs := Configurations{
+		Configs:        []Configuration{templateConfig},
+		SlackToken:     "",
+		SlackChannelID: "",
 	}
 
 	file, err := os.Create(filePath)
@@ -45,7 +51,7 @@ func CreateTemplateConfig(filePath string) error {
 
 	encoder := json.NewEncoder(file)
 	encoder.SetIndent("", "  ")
-	return encoder.Encode(templateConfig)
+	return encoder.Encode(templateConfigs)
 }
 
 // ReadConfigFromFile reads a single configuration from a file.

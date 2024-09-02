@@ -19,8 +19,8 @@ The configuration is done via a JSON file. Below is an example configuration:
     "configs": [
         {
             "name": "MRC-Astral",
-            "directories": ["D:/watch_folder/MRC-Astral"],
-            "destination": "D:/watch_folder",
+            "directories": ["path/to/source1"],
+            "destinations": ["path/to/destination1", "path/to/destination2"],
             "check_interval": "5s",
             "min_free_space": 10485760000,
             "min_file_size": 10485760
@@ -36,7 +36,7 @@ The configuration is done via a JSON file. Below is an example configuration:
 - **configs**: An array of configuration objects for each directory to monitor.
     - **name**: A name for the configuration.
     - **directories**: An array of directories to monitor.
-    - **destination**: The destination directory where files will be copied.
+    - **destinations**: List of destinations to mirror files to.
     - **check_interval**: The interval at which to check the directories for new files.
     - **min_free_space**: The minimum free space required in the destination directory (in bytes).
     - **min_file_size**: The minimum file size required to be copied (in bytes).

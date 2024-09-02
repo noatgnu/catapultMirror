@@ -5,46 +5,48 @@ import (
 	"testing"
 )
 
-func TestInitDB(t *testing.T) {
-	db, err := InitDB(":memory:")
-	if err != nil {
-		t.Fatalf("InitDB() error: %v", err)
-	}
-	defer db.Close()
-
-	// Check if the table was created
-	var tableName string
-	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='file_sizes';").Scan(&tableName)
-	if err != nil {
-		t.Fatalf("Failed to query table: %v", err)
-	}
-	if tableName != "file_sizes" {
-		t.Fatalf("Table name = %v, want %v", tableName, "file_sizes")
-	}
-}
-
 func TestMarkFileAsCopied(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
 	filePath := "testfile.txt"
-	_, err := db.Exec("INSERT INTO file_sizes (path, size, copied) VALUES (?, ?, ?)", filePath, 100, false)
-	if err != nil {
-		t.Fatalf("Failed to insert file: %v", err)
-	}
+	destination := "destination"
+	isFolder := false
 
-	err = MarkFileAsCopied(db, filePath)
+	err := MarkFileAsCopied(db, filePath, destination, isFolder)
 	if err != nil {
 		t.Fatalf("MarkFileAsCopied() error: %v", err)
 	}
 
-	var copied bool
-	err = db.QueryRow("SELECT copied FROM file_sizes WHERE path = ?", filePath).Scan(&copied)
+	var count int
+	err = db.QueryRow("SELECT COUNT(*) FROM copied_files WHERE file_path = ? AND destination = ? AND is_folder = ?", filePath, destination, isFolder).Scan(&count)
 	if err != nil {
-		t.Fatalf("Failed to query file: %v", err)
+		t.Fatalf("Failed to query copied_files: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("Expected 1 record in copied_files, got %d", count)
+	}
+}
+
+func TestIsFileCopied(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	filePath := "testfile.txt"
+	destination := "destination"
+	isFolder := false
+
+	_, err := db.Exec("INSERT INTO copied_files (file_path, destination, is_folder) VALUES (?, ?, ?)", filePath, destination, isFolder)
+	if err != nil {
+		t.Fatalf("Failed to insert copied file: %v", err)
+	}
+
+	copied, err := IsFileCopied(db, filePath, destination, isFolder)
+	if err != nil {
+		t.Fatalf("IsFileCopied() error: %v", err)
 	}
 	if !copied {
-		t.Fatalf("copied = %v, want %v", copied, true)
+		t.Fatalf("Expected file to be marked as copied")
 	}
 }
 
@@ -54,14 +56,15 @@ func TestSaveFileSize(t *testing.T) {
 
 	filePath := "testfile.txt"
 	fileSize := int64(100)
+	isFolder := false
 
-	err := SaveFileSize(db, filePath, fileSize)
+	err := SaveFileSize(db, filePath, fileSize, isFolder)
 	if err != nil {
 		t.Fatalf("SaveFileSize() error: %v", err)
 	}
 
 	var size int64
-	err = db.QueryRow("SELECT size FROM file_sizes WHERE path = ?", filePath).Scan(&size)
+	err = db.QueryRow("SELECT size FROM file_sizes WHERE path = ? AND is_folder = ?", filePath, isFolder).Scan(&size)
 	if err != nil {
 		t.Fatalf("Failed to query file: %v", err)
 	}
@@ -76,35 +79,18 @@ func TestGetFileSizeFromDB(t *testing.T) {
 
 	filePath := "testfile.txt"
 	fileSize := int64(100)
-	_, err := db.Exec("INSERT INTO file_sizes (path, size) VALUES (?, ?)", filePath, fileSize)
+	isFolder := false
+
+	_, err := db.Exec("INSERT INTO file_sizes (path, size, is_folder) VALUES (?, ?, ?)", filePath, fileSize, isFolder)
 	if err != nil {
 		t.Fatalf("Failed to insert file: %v", err)
 	}
 
-	size, err := GetFileSizeFromDB(db, filePath)
+	size, err := GetFileSizeFromDB(db, filePath, isFolder)
 	if err != nil {
 		t.Fatalf("GetFileSizeFromDB() error: %v", err)
 	}
 	if size != fileSize {
 		t.Fatalf("size = %v, want %v", size, fileSize)
-	}
-}
-
-func TestIsFileCopied(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	filePath := "testfile.txt"
-	_, err := db.Exec("INSERT INTO file_sizes (path, size, copied) VALUES (?, ?, ?)", filePath, 100, true)
-	if err != nil {
-		t.Fatalf("Failed to insert file: %v", err)
-	}
-
-	copied, err := IsFileCopied(db, filePath)
-	if err != nil {
-		t.Fatalf("IsFileCopied() error: %v", err)
-	}
-	if !copied {
-		t.Fatalf("copied = %v, want %v", copied, true)
 	}
 }

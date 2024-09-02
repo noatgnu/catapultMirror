@@ -62,14 +62,6 @@ func main() {
 		go func(config catapult.Configuration) {
 			defer wg.Done()
 
-			freeSpace, err := catapult.GetFreeSpace(config.Destination)
-			if err != nil {
-				catapult.LogWithDatetime(fmt.Sprintf("Error getting free space: %v", err), false)
-				return
-			}
-
-			catapult.LogWithDatetime(fmt.Sprintf("Destination free space for %s: %.2f MB", config.Name, float64(freeSpace)/1024/1024), false)
-
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 

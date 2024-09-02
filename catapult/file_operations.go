@@ -7,64 +7,94 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"github.com/schollz/progressbar/v3"
 	"io"
 	"os"
 	"path/filepath"
-	"time"
+	"strings"
 )
 
-// ListFiles returns a list of all files in the given root directory and its subdirectories.
+// ListFiles returns a list of all files and directories in the given root directory and its subdirectories.
 //
 // Parameters:
-// - root: The root directory to list files from.
+// - root: The root directory to list files and directories from.
 //
 // Returns:
-// - []string: A slice of file paths.
-// - error: An error object if there was an issue listing the files.
+// - []string: A slice of file and directory paths.
+// - error: An error object if there was an issue listing the files and directories.
 func ListFiles(root string) ([]string, error) {
-	var files []string
+	var paths []string
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if !info.IsDir() {
-			files = append(files, path)
-		}
+		paths = append(paths, path)
 		return nil
 	})
-	return files, err
+	return paths, err
 }
 
-// IsFileCompleted checks if a file has completed writing by comparing its size over a specified duration.
+// IsFileCompleted checks if a file or directory has completed writing by comparing its size over a specified duration.
 //
 // Parameters:
 // - db: The database connection to track file sizes.
-// - filePath: The path of the file to check.
-// - duration: The duration to wait before checking the file size again.
+// - path: The path of the file or directory to check.
 //
 // Returns:
-// - bool: True if the file size has not changed, indicating the file is completed.
-func IsFileCompleted(db *sql.DB, filePath string, duration time.Duration) bool {
-	initialSize, err := GetFileSizeFromDB(db, filePath)
-	if err != nil {
-		LogWithDatetime(fmt.Sprintf("Error getting file size from DB: %v", err), true)
-		return false
+// - bool: True if the size has not changed, indicating the file or directory is completed.
+func IsFileCompleted(db *sql.DB, path string, isFolder bool) bool {
+	var initialSize int64
+
+	if strings.HasSuffix(path, ".d") {
+		initialSize = GetDirectorySize(path)
+	} else {
+		initialSize = GetFileSize(path)
 	}
 
 	if initialSize == -1 {
-		initialSize = GetFileSize(filePath)
+		initialSize = GetFileSize(path)
 		dbMutex.Lock()
-		SaveFileSize(db, filePath, initialSize)
+		SaveFileSize(db, path, initialSize, isFolder)
 		dbMutex.Unlock()
+		return false
 	}
 
-	time.Sleep(duration)
-	finalSize := GetFileSize(filePath)
+	var finalSize int64
+	if strings.HasSuffix(path, ".d") {
+		finalSize = GetDirectorySize(path)
+	} else {
+		finalSize = GetFileSize(path)
+	}
+
 	dbMutex.Lock()
-	SaveFileSize(db, filePath, finalSize)
+	SaveFileSize(db, path, finalSize, isFolder)
 	dbMutex.Unlock()
 
 	return initialSize == finalSize
+}
+
+// GetDirectorySize returns the total size of all files in the directory.
+//
+// Parameters:
+// - dirPath: The path of the directory to get the size of.
+//
+// Returns:
+// - int64: The total size of the directory in bytes, or -1 if there was an error.
+func GetDirectorySize(dirPath string) int64 {
+	var totalSize int64
+	err := filepath.Walk(dirPath, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			totalSize += info.Size()
+		}
+		return nil
+	})
+	if err != nil {
+		return -1
+	}
+	return totalSize
 }
 
 // GetFileSize returns the size of the file at the given path.
@@ -127,6 +157,8 @@ func CopyFile(ctx context.Context, src, dst string) (int64, error) {
 	buffer := make([]byte, 1024*1024)
 	var copiedSize int64
 
+	bar := progressbar.NewOptions64(totalSize, progressbar.OptionSetDescription(fmt.Sprintf("Copying %s to %s", src, dst)))
+
 copyLoop:
 	for {
 		select {
@@ -148,7 +180,10 @@ copyLoop:
 			}
 
 			copiedSize += int64(n)
-			fmt.Printf("\rCopying %s to %s: %.2f%%", src, dst, float64(copiedSize)/float64(totalSize)*100)
+			err = bar.Add(n)
+			if err != nil {
+				return 0, err
+			}
 			if copiedSize == totalSize {
 				break copyLoop
 			}
@@ -159,24 +194,49 @@ copyLoop:
 	return totalSize, nil
 }
 
-// CalculateFileHash calculates the SHA-256 hash of the file at the given path.
+// CalculateFileHash calculates the SHA-256 hash of the file or directory at the given path.
 //
 // Parameters:
-// - filePath: The path of the file to calculate the hash for.
+// - filePath: The path of the file or directory to calculate the hash for.
 //
 // Returns:
-// - string: The SHA-256 hash of the file in hexadecimal format.
+// - string: The SHA-256 hash in hexadecimal format.
 // - error: An error object if there was an issue calculating the hash.
 func CalculateFileHash(filePath string) (string, error) {
-	file, err := os.Open(filePath)
+	info, err := os.Stat(filePath)
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
 
 	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
+
+	if info.IsDir() {
+		err := filepath.Walk(filePath, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() {
+				fileHash, err := CalculateFileHash(path)
+				if err != nil {
+					return err
+				}
+				hash.Write([]byte(fileHash))
+			}
+			return nil
+		})
+		if err != nil {
+			return "", err
+		}
+	} else {
+		file, err := os.Open(filePath)
+		if err != nil {
+			return "", err
+		}
+		defer file.Close()
+
+		if _, err := io.Copy(hash, file); err != nil {
+			return "", err
+		}
 	}
 
 	return hex.EncodeToString(hash.Sum(nil)), nil
