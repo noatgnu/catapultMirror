@@ -96,6 +96,16 @@ func monitorDirectory(ctx context.Context, db *sql.DB, cfg Configuration) {
 // - cfg: The configuration for the directory to monitor.
 // - freeSpace: The available free space in the destination directory.
 // - duration: The interval duration for checking file completion.
+// processFiles processes the files and directories in a directory, checking if they are completed and copying them if necessary.
+// It verifies if the files and directories are already copied and if they are completed before initiating the copy process.
+//
+// Parameters:
+// - ctx: The context to control the file processing lifecycle.
+// - db: The database connection to track copied files.
+// - dir: The directory to process files and directories from.
+// - cfg: The configuration for the directory to monitor.
+// - freeSpace: The available free space in the destination directory.
+// - duration: The interval duration for checking file completion.
 func processFiles(ctx context.Context, db *sql.DB, dir string, cfg Configuration, destination string, freeSpace int64, duration time.Duration) {
 	LogWithDatetime(fmt.Sprintf("Listing files and directories in directory: %s", dir), true)
 	paths, err := ListFiles(dir)
@@ -153,6 +163,18 @@ func processFiles(ctx context.Context, db *sql.DB, dir string, cfg Configuration
 			SaveFileSize(db, path, size, isFolder)
 			dbMutex.Unlock()
 			LogWithDatetime(fmt.Sprintf("File or directory size changed, not ready for copying: %s", path), false)
+			continue
+		}
+
+		lastModified, err := GetLastModifiedTime(db, path)
+		if err != nil {
+			LogWithDatetime(fmt.Sprintf("Error retrieving last modified time: %v", err), true)
+			sendSlackNotification(fmt.Sprintf("Error retrieving last modified time: %v", err))
+			continue
+		}
+
+		if time.Since(lastModified) < duration {
+			LogWithDatetime(fmt.Sprintf("File or directory not ready for copying due to recent modification: %s", path), false)
 			continue
 		}
 

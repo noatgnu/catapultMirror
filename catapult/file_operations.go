@@ -14,7 +14,8 @@ import (
 	"strings"
 )
 
-// ListFiles returns a list of all files and directories in the given root directory and its subdirectories.
+// ListFiles returns a list of all files and directories in the given root directory and its subdirectories,
+// excluding the contents of directories ending with .d.
 //
 // Parameters:
 // - root: The root directory to list files and directories from.
@@ -27,6 +28,11 @@ func ListFiles(root string) ([]string, error) {
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+		// Include directories ending with .d but skip their contents
+		if info.IsDir() && filepath.Ext(info.Name()) == ".d" {
+			paths = append(paths, path)
+			return filepath.SkipDir
 		}
 		paths = append(paths, path)
 		return nil

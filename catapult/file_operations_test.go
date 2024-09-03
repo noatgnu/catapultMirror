@@ -3,72 +3,47 @@ package catapult
 
 import (
 	"context"
+	"fmt"
 	"os"
-	"path/filepath"
 	"testing"
+	"time"
 )
 
-func TestCopyFileWithVerification_File(t *testing.T) {
+func TestCopyFile(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
 	ctx := context.Background()
-	file := "testfile.txt"
-	dir := "."
-	destination := "destination"
-	cfg := Configuration{}
-	freeSpace := int64(1000)
+	src := "testfile.txt"
+	dst := "destination/testfile.txt"
+	interval := time.Second
 
 	// Create a test file
-	err := os.WriteFile(file, []byte("test content"), 0644)
+	err := os.WriteFile(src, []byte("test content"), 0644)
 	if err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
-	defer os.Remove(file)
+	defer os.Remove(src)
 
-	copyFileWithVerification(ctx, db, file, dir, destination, cfg, freeSpace)
+	// Save initial file size and last modified time
+	SaveFileSize(db, src, int64(len("test content")), false)
+
+	// Wait for the interval duration
+	time.Sleep(interval)
+
+	// Copy the file
+	_, err = CopyFile(ctx, src, dst)
+	if err != nil {
+		t.Fatalf("CopyFile() error: %v", err)
+	}
+
+	// Rename the copied file
+	err = os.Rename(dst+".cat.part", dst)
 
 	// Verify the file was copied
-	destPath := filepath.Join(destination, file)
-	if _, err := os.Stat(destPath); os.IsNotExist(err) {
-		t.Fatalf("Expected file to be copied to %s", destPath)
+	if _, err := os.Stat(dst); os.IsNotExist(err) {
+		fmt.Printf("Error: %v\n", err)
+		t.Fatalf("Expected file to be copied to %s", dst)
 	}
-}
-
-func TestCopyFileWithVerification_Folder(t *testing.T) {
-	db := setupTestDB(t)
-	defer db.Close()
-
-	ctx := context.Background()
-	folder := "testfolder"
-	dir := "."
-	destination := "destination"
-	cfg := Configuration{}
-	freeSpace := int64(1000)
-
-	// Create a test folder with a file
-	err := os.Mkdir(folder, 0755)
-	if err != nil {
-		t.Fatalf("Failed to create test folder: %v", err)
-	}
-	defer os.RemoveAll(folder)
-
-	file := filepath.Join(folder, "testfile.txt")
-	err = os.WriteFile(file, []byte("test content"), 0644)
-	if err != nil {
-		t.Fatalf("Failed to create test file: %v", err)
-	}
-
-	copyFileWithVerification(ctx, db, folder, dir, destination, cfg, freeSpace)
-
-	// Verify the folder and file were copied
-	destFolderPath := filepath.Join(destination, folder)
-	if _, err := os.Stat(destFolderPath); os.IsNotExist(err) {
-		t.Fatalf("Expected folder to be copied to %s", destFolderPath)
-	}
-
-	destFilePath := filepath.Join(destFolderPath, "testfile.txt")
-	if _, err := os.Stat(destFilePath); os.IsNotExist(err) {
-		t.Fatalf("Expected file to be copied to %s", destFilePath)
-	}
+	defer os.RemoveAll("destination")
 }

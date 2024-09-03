@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	_ "modernc.org/sqlite"
 	"testing"
+	"time"
 )
 
 // setupTestDB sets up an in-memory SQLite database for testing purposes.
@@ -22,18 +23,18 @@ func setupTestDB(t *testing.T) *sql.DB {
 	}
 
 	createTableSQL := `
-        CREATE TABLE IF NOT EXISTS file_sizes (
-            path TEXT,
-            size INTEGER,
-            is_folder BOOLEAN,
-            PRIMARY KEY (path, is_folder)
-        );
-        CREATE TABLE IF NOT EXISTS copied_files (
-            file_path TEXT,
-            destination TEXT,
-            is_folder BOOLEAN,
-            PRIMARY KEY (file_path, destination, is_folder)
-        );`
+	 CREATE TABLE IF NOT EXISTS file_sizes (
+	  path TEXT PRIMARY KEY,
+	  size INTEGER,
+	  is_folder BOOLEAN,
+	  last_modified TIMESTAMP
+	 );
+	 CREATE TABLE IF NOT EXISTS copied_files (
+	  file_path TEXT,
+	  destination TEXT,
+	  is_folder BOOLEAN,
+	  PRIMARY KEY (file_path, destination, is_folder)
+	 );`
 	_, err = db.Exec(createTableSQL)
 	if err != nil {
 		t.Fatalf("Failed to create tables: %v", err)
@@ -58,18 +59,18 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	}
 
 	createTableSQL := `
-        CREATE TABLE IF NOT EXISTS file_sizes (
-            path TEXT,
-            size INTEGER,
-            is_folder BOOLEAN,
-            PRIMARY KEY (path, is_folder)
-        );
-        CREATE TABLE IF NOT EXISTS copied_files (
-            file_path TEXT,
-            destination TEXT,
-            is_folder BOOLEAN,
-            PRIMARY KEY (file_path, destination, is_folder)
-        );`
+	 CREATE TABLE IF NOT EXISTS file_sizes (
+	  path TEXT PRIMARY KEY,
+	  size INTEGER,
+	  is_folder BOOLEAN,
+	  last_modified TIMESTAMP
+	 );
+	 CREATE TABLE IF NOT EXISTS copied_files (
+	  file_path TEXT,
+	  destination TEXT,
+	  is_folder BOOLEAN,
+	  PRIMARY KEY (file_path, destination, is_folder)
+ 	);`
 	_, err = db.Exec(createTableSQL)
 	if err != nil {
 		return nil, err
@@ -89,9 +90,28 @@ func InitDB(dbPath string) (*sql.DB, error) {
 // Returns:
 // - error: An error object if there was an issue inserting or updating the database.
 func SaveFileSize(db *sql.DB, filePath string, size int64, isFolder bool) error {
-	insertSQL := `INSERT OR REPLACE INTO file_sizes (path, size, is_folder) VALUES (?, ?, ?);`
-	_, err := db.Exec(insertSQL, filePath, size, isFolder)
+	lastModified := time.Now()
+	insertSQL := `INSERT OR REPLACE INTO file_sizes (path, size, is_folder, last_modified) VALUES (?, ?, ?, ?);`
+	_, err := db.Exec(insertSQL, filePath, size, isFolder, lastModified)
 	return err
+}
+
+// GetLastModifiedTime retrieves the last modified time of a file or directory from the database.
+//
+// Parameters:
+// - db: The database connection to retrieve the last modified time.
+// - path: The path of the file or directory.
+//
+// Returns:
+// - time.Time: The last modified time.
+// - error: An error object if there was an issue retrieving the last modified time.
+func GetLastModifiedTime(db *sql.DB, path string) (time.Time, error) {
+	var lastModified time.Time
+	err := db.QueryRow(`SELECT last_modified FROM file_sizes WHERE path = ?`, path).Scan(&lastModified)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return lastModified, nil
 }
 
 // GetFileSizeFromDB retrieves the size of a file from the database.
