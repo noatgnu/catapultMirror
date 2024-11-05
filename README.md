@@ -16,18 +16,23 @@ The configuration is done via a JSON file. Below is an example configuration:
 
 ```json
 {
-    "configs": [
-        {
-            "name": "MRC-Astral",
-            "directories": ["path/to/source1"],
-            "destinations": ["path/to/destination1", "path/to/destination2"],
-            "check_interval": "5s",
-            "min_free_space": 10485760000,
-            "min_file_size": 10485760
-        }
-    ],
-    "slack_token": "",
-    "slack_channel_id": ""
+  "configs": [
+    {
+      "name": "MRC-Astral",
+      "directories": [
+        "D:/watch_folder/MRC-Astral"
+      ],
+      "destinations": [
+        "D:/watch_folder/out1",
+        "D:/watch_folder/out2"
+      ],
+      "check_interval": "5s",
+      "min_free_space": 10485760000,
+      "min_file_size": 1048576
+    }
+  ],
+  "slack_token": "",
+  "slack_channel_id": ""
 }
 ```
 
