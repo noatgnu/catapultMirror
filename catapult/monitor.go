@@ -63,7 +63,7 @@ func monitorDirectory(ctx context.Context, db *sql.DB, cfg Configuration) {
 
 			for _, destination := range cfg.Destinations {
 				fmt.Printf("Monitoring directory: %s\n", cfg.Name)
-				LogWithDatetime(fmt.Sprintf("Checking free space for destination: %s", destination), true)
+				LogWithDatetime(fmt.Sprintf("Checking free space for destination: %s", destination), false)
 				freeSpace, err := GetFreeSpace(destination)
 				if err != nil {
 					LogWithDatetime("Error getting free space:", true)
@@ -72,8 +72,8 @@ func monitorDirectory(ctx context.Context, db *sql.DB, cfg Configuration) {
 				}
 
 				if freeSpace <= cfg.MinFreeSpace {
-					LogWithDatetime("No space left at destination. Shutting down gracefully.", true)
-					sendSlackNotification("No space left at destination. Shutting down gracefully.")
+					LogWithDatetime("No space left at destination.", true)
+					sendSlackNotification("No space left at destination.")
 					return
 				}
 
@@ -107,7 +107,7 @@ func monitorDirectory(ctx context.Context, db *sql.DB, cfg Configuration) {
 // - freeSpace: The available free space in the destination directory.
 // - duration: The interval duration for checking file completion.
 func processFiles(ctx context.Context, db *sql.DB, dir string, cfg Configuration, destination string, freeSpace int64, duration time.Duration) {
-	LogWithDatetime(fmt.Sprintf("Listing files and directories in directory: %s", dir), true)
+	LogWithDatetime(fmt.Sprintf("Listing files and directories in directory: %s", dir), false)
 	paths, err := ListFiles(dir)
 	if err != nil {
 		LogWithDatetime("Error listing files and directories:", true)

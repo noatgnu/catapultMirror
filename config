@@ -1,0 +1,17 @@
+{
+  "configs": [
+    {
+      "name": "MRC-Astral",
+      "directories": [
+        "D:/watch_folder/MRC-Astral"
+      ],
+      "destinations": [
+        "D:/watch_folder/out1",
+        "D:/watch_folder/out2"
+      ],
+      "check_interval": "5s",
+      "min_free_space": 10485760000,
+      "min_file_size": 1048576
+    }
+  ]
+}
