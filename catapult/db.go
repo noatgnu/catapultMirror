@@ -35,6 +35,7 @@ func setupTestDB(t *testing.T) *sql.DB {
 	  destination TEXT,
 	  is_folder BOOLEAN,
 	  checksum TEXT,
+	  size INTEGER,
 	  PRIMARY KEY (file_path, destination, is_folder)
 	 );`
 	_, err = db.Exec(createTableSQL)
@@ -73,6 +74,7 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	  destination TEXT,
 	  is_folder BOOLEAN,
 	  checksum TEXT,
+	  size INTEGER,
 	  PRIMARY KEY (file_path, destination, is_folder)
  	);`
 	_, err = db.Exec(createTableSQL)
@@ -197,4 +199,20 @@ func GetCopiedFileChecksum(db *sql.DB, filePath, destination string) (string, er
 	query := `SELECT checksum FROM copied_files WHERE file_path = ? AND destination = ?`
 	err := db.QueryRow(query, filePath, destination).Scan(&checksum)
 	return checksum, err
+}
+
+func UpdateCopiedFileSize(db *sql.DB, filePath, destination string, size int64) error {
+	query := `UPDATE copied_files SET size = ? WHERE file_path = ? AND destination = ?`
+	_, err := db.Exec(query, size, filePath, destination)
+	return err
+}
+
+func GetCopiedFileSize(db *sql.DB, filePath, destination string) (int64, error) {
+	var size int64
+	query := `SELECT size FROM copied_files WHERE file_path = ? AND destination = ?`
+	err := db.QueryRow(query, filePath, destination).Scan(&size)
+	if err == sql.ErrNoRows {
+		return -1, nil
+	}
+	return size, err
 }

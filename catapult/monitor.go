@@ -189,6 +189,38 @@ func processFiles(ctx context.Context, db *sql.DB, dir string, cfg Configuration
 			}
 		}
 
+		copiedFileSize, err := GetCopiedFileSize(db, path, destination)
+		if err != nil && err != sql.ErrNoRows {
+			LogWithDatetime(fmt.Sprintf("Error getting copied file size: %v", err), true)
+			sendSlackNotification(fmt.Sprintf("Error getting copied file size: %v", err))
+			continue
+		}
+		if copiedFileSize != -1 && copiedFileSize == size {
+			originHash, err := GetOriginFileChecksum(db, path)
+			if err != nil && err != sql.ErrNoRows {
+				LogWithDatetime(fmt.Sprintf("Error getting origin file checksum: %v", err), true)
+				sendSlackNotification(fmt.Sprintf("Error getting origin file checksum: %v", err))
+				continue
+			}
+			destinationHash, err := GetCopiedFileChecksum(db, path, destination)
+			if err != nil && err != sql.ErrNoRows {
+				LogWithDatetime(fmt.Sprintf("Error getting copied file checksum: %v", err), true)
+				sendSlackNotification(fmt.Sprintf("Error getting copied file checksum: %v", err))
+				continue
+			}
+			if originHash == "" || destinationHash == "" {
+				copyFileWithVerification(ctx, db, path, dir, destination, cfg, freeSpace)
+				continue
+
+			} else if originHash == destinationHash {
+				dbMutex.Lock()
+				MarkFileAsCopied(db, path, destination, isFolder)
+				dbMutex.Unlock()
+				LogWithDatetime(fmt.Sprintf("File or directory already copied: %s", path), false)
+				continue
+			}
+		}
+
 		copyFileWithVerification(ctx, db, path, dir, destination, cfg, freeSpace)
 	}
 }
@@ -372,6 +404,7 @@ func copyFileWithVerification(ctx context.Context, db *sql.DB, file, dir, destin
 					UpdateCopiedFileChecksum(db, file, destination, copiedHash)
 					SaveFileSize(db, file, fileSize, isFolder)
 					UpdateFileChecksum(db, file, originalHash)
+					UpdateCopiedFileSize(db, file, destination, fileSize)
 					dbMutex.Unlock()
 				}
 			} else {
