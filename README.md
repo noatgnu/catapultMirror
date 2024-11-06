@@ -28,7 +28,8 @@ The configuration is done via a JSON file. Below is an example configuration:
       ],
       "check_interval": "5s",
       "min_free_space": 10485760000,
-      "min_file_size": 1048576
+      "min_file_size": 1048576,
+      "override_if_different": true
     }
   ],
   "slack_token": "",

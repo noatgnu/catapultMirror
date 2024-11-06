@@ -8,13 +8,13 @@ import (
 )
 
 type Configuration struct {
-	Name             string   `json:"name"`
-	Directories      []string `json:"directories"`
-	Destinations     []string `json:"destinations"`
-	CheckInterval    string   `json:"check_interval"`
-	MinFreeSpace     int64    `json:"min_free_space"`
-	MinFileSize      int64    `json:"min_file_size"`
-	OverrideIfLarger bool     `json:"override_if_larger"`
+	Name                string   `json:"name"`
+	Directories         []string `json:"directories"`
+	Destinations        []string `json:"destinations"`
+	CheckInterval       string   `json:"check_interval"`
+	MinFreeSpace        int64    `json:"min_free_space"`
+	MinFileSize         int64    `json:"min_file_size"`
+	OverrideIfDifferent bool     `json:"override_if_different"`
 }
 type Configurations struct {
 	Configs        []Configuration `json:"configs"`
@@ -31,12 +31,12 @@ type Configurations struct {
 // - error: An error object if there was an issue creating the file.
 func CreateTemplateConfig(filePath string) error {
 	templateConfig := Configuration{
-		Directories:      []string{"exampleDir1", "exampleDir2"},
-		Destinations:     []string{"exampleDestinationDir", "exampleDestinationDir2"},
-		CheckInterval:    "1m",
-		MinFreeSpace:     10000 * 1024 * 1024, // 10 GB
-		MinFileSize:      1024 * 1024,         // 1 MB
-		OverrideIfLarger: false,
+		Directories:         []string{"exampleDir1", "exampleDir2"},
+		Destinations:        []string{"exampleDestinationDir", "exampleDestinationDir2"},
+		CheckInterval:       "1m",
+		MinFreeSpace:        10000 * 1024 * 1024, // 10 GB
+		MinFileSize:         1024 * 1024,         // 1 MB
+		OverrideIfDifferent: false,
 	}
 
 	templateConfigs := Configurations{

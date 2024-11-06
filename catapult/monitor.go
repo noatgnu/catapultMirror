@@ -289,22 +289,18 @@ func copyFileWithVerification(ctx context.Context, db *sql.DB, file, dir, destin
 				MarkFileAsCopied(db, file, destination, isFolder)
 				dbMutex.Unlock()
 				return
-			} else {
-				originalSize := GetFileSize(file)
-				destinationSize := GetFileSize(destPath)
-				if cfg.OverrideIfLarger && originalSize > destinationSize {
-					LogWithDatetime(fmt.Sprintf("Overriding file: %s because original is larger", destPath), true)
-					sendSlackNotification(fmt.Sprintf("Overriding file: %s because original is larger", destPath))
-					if err := os.Remove(destPath); err != nil {
-						LogWithDatetime(fmt.Sprintf("Error removing existing file: %v", err), true)
-						sendSlackNotification(fmt.Sprintf("Error removing existing file: %v", err))
-						return
-					}
-				} else {
-					LogWithDatetime(fmt.Sprintf("File already exists but is different: %s", destPath), true)
-					sendSlackNotification(fmt.Sprintf("File already exists but is different: %s", destPath))
+			} else if cfg.OverrideIfDifferent {
+				LogWithDatetime(fmt.Sprintf("Overriding file: %s because it is different", destPath), true)
+				sendSlackNotification(fmt.Sprintf("Overriding file: %s because it is different", destPath))
+				if err := os.Remove(destPath); err != nil {
+					LogWithDatetime(fmt.Sprintf("Error removing existing file: %v", err), true)
+					sendSlackNotification(fmt.Sprintf("Error removing existing file: %v", err))
 					return
 				}
+			} else {
+				LogWithDatetime(fmt.Sprintf("File already exists but is different: %s", destPath), true)
+				sendSlackNotification(fmt.Sprintf("File already exists but is different: %s", destPath))
+				return
 			}
 		}
 
