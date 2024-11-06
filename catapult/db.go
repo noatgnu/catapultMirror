@@ -27,12 +27,14 @@ func setupTestDB(t *testing.T) *sql.DB {
 	  path TEXT PRIMARY KEY,
 	  size INTEGER,
 	  is_folder BOOLEAN,
-	  last_modified TIMESTAMP
+	  last_modified TIMESTAMP,
+	  checksum TEXT
 	 );
 	 CREATE TABLE IF NOT EXISTS copied_files (
 	  file_path TEXT,
 	  destination TEXT,
 	  is_folder BOOLEAN,
+	  checksum TEXT,
 	  PRIMARY KEY (file_path, destination, is_folder)
 	 );`
 	_, err = db.Exec(createTableSQL)
@@ -63,12 +65,14 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	  path TEXT PRIMARY KEY,
 	  size INTEGER,
 	  is_folder BOOLEAN,
-	  last_modified TIMESTAMP
+	  last_modified TIMESTAMP,
+	  checksum TEXT
 	 );
 	 CREATE TABLE IF NOT EXISTS copied_files (
 	  file_path TEXT,
 	  destination TEXT,
 	  is_folder BOOLEAN,
+	  checksum TEXT,
 	  PRIMARY KEY (file_path, destination, is_folder)
  	);`
 	_, err = db.Exec(createTableSQL)
@@ -167,4 +171,30 @@ func IsFileCopied(db *sql.DB, filePath, destination string, isFolder bool) (bool
 func MarkFileAsCopied(db *sql.DB, filePath, destination string, isFolder bool) error {
 	_, err := db.Exec("INSERT INTO copied_files (file_path, destination, is_folder) VALUES (?, ?, ?)", filePath, destination, isFolder)
 	return err
+}
+
+func UpdateFileChecksum(db *sql.DB, filePath, checksum string) error {
+	query := `UPDATE file_sizes SET checksum = ? WHERE path = ?`
+	_, err := db.Exec(query, checksum, filePath)
+	return err
+}
+
+func UpdateCopiedFileChecksum(db *sql.DB, filePath, destination, checksum string) error {
+	query := `UPDATE copied_files SET checksum = ? WHERE file_path = ? AND destination = ?`
+	_, err := db.Exec(query, checksum, filePath, destination)
+	return err
+}
+
+func GetOriginFileChecksum(db *sql.DB, filePath string) (string, error) {
+	var checksum string
+	query := `SELECT checksum FROM file_sizes WHERE path = ?`
+	err := db.QueryRow(query, filePath).Scan(&checksum)
+	return checksum, err
+}
+
+func GetCopiedFileChecksum(db *sql.DB, filePath, destination string) (string, error) {
+	var checksum string
+	query := `SELECT checksum FROM copied_files WHERE file_path = ? AND destination = ?`
+	err := db.QueryRow(query, filePath, destination).Scan(&checksum)
+	return checksum, err
 }

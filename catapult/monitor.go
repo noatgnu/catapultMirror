@@ -177,15 +177,16 @@ func processFiles(ctx context.Context, db *sql.DB, dir string, cfg Configuration
 			LogWithDatetime(fmt.Sprintf("File or directory not ready for copying due to recent modification: %s", path), false)
 			continue
 		}
-
-		copied, err := IsFileCopied(db, path, destination, isFolder)
-		if err != nil {
-			LogWithDatetime(fmt.Sprintf("Error checking if file or directory is copied: %v", err), true)
-			sendSlackNotification(fmt.Sprintf("Error checking if file or directory is copied: %v", err))
-			continue
-		}
-		if copied {
-			continue
+		if !cfg.OverrideIfDifferent {
+			copied, err := IsFileCopied(db, path, destination, isFolder)
+			if err != nil {
+				LogWithDatetime(fmt.Sprintf("Error checking if file or directory is copied: %v", err), true)
+				sendSlackNotification(fmt.Sprintf("Error checking if file or directory is copied: %v", err))
+				continue
+			}
+			if copied {
+				continue
+			}
 		}
 
 		copyFileWithVerification(ctx, db, path, dir, destination, cfg, freeSpace)
@@ -210,7 +211,6 @@ func copyFileWithVerification(ctx context.Context, db *sql.DB, file, dir, destin
 		return
 	}
 	destPath := filepath.Join(destination, relPath)
-
 	info, err := os.Stat(file)
 	if err != nil {
 		LogWithDatetime(fmt.Sprintf("Error stating path: %v", err), true)
@@ -267,18 +267,27 @@ func copyFileWithVerification(ctx context.Context, db *sql.DB, file, dir, destin
 	} else {
 		// Check if the file already exists at the destination
 		if _, err := os.Stat(destPath); err == nil {
-			// File exists, calculate hashes
+			destinationHash, err := GetCopiedFileChecksum(db, file, destPath)
+			if err != nil && err != sql.ErrNoRows {
+				LogWithDatetime(fmt.Sprintf("Error getting checksum from database: %v", err), true)
+				sendSlackNotification(fmt.Sprintf("Error getting checksum from database: %v", err))
+				return
+			}
+
+			if destinationHash == "" {
+				// Calculate the hash of the destination file
+				destinationHash, err = CalculateFileHash(destPath)
+				if err != nil {
+					LogWithDatetime(fmt.Sprintf("Error calculating hash for destination file: %v", err), true)
+					sendSlackNotification(fmt.Sprintf("Error calculating hash for destination file: %v", err))
+					return
+				}
+			}
+
 			originalHash, err := CalculateFileHash(file)
 			if err != nil {
 				LogWithDatetime(fmt.Sprintf("Error calculating hash for original file: %v", err), true)
 				sendSlackNotification(fmt.Sprintf("Error calculating hash for original file: %v", err))
-				return
-			}
-
-			destinationHash, err := CalculateFileHash(destPath)
-			if err != nil {
-				LogWithDatetime(fmt.Sprintf("Error calculating hash for destination file: %v", err), true)
-				sendSlackNotification(fmt.Sprintf("Error calculating hash for destination file: %v", err))
 				return
 			}
 
@@ -287,6 +296,7 @@ func copyFileWithVerification(ctx context.Context, db *sql.DB, file, dir, destin
 				sendSlackNotification(fmt.Sprintf("File already exists and is identical: %s", destPath))
 				dbMutex.Lock()
 				MarkFileAsCopied(db, file, destination, isFolder)
+				UpdateCopiedFileChecksum(db, file, destination, destinationHash)
 				dbMutex.Unlock()
 				return
 			} else if cfg.OverrideIfDifferent {
