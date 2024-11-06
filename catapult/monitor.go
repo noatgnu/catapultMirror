@@ -267,10 +267,10 @@ func copyFileWithVerification(ctx context.Context, db *sql.DB, file, dir, destin
 	} else {
 		// Check if the file already exists at the destination
 		if _, err := os.Stat(destPath); err == nil {
-			destinationHash, err := GetCopiedFileChecksum(db, file, destPath)
+			destinationHash, err := GetCopiedFileChecksum(db, file, destination)
 			if err != nil && err != sql.ErrNoRows {
-				LogWithDatetime(fmt.Sprintf("Error getting checksum from database: %v", err), true)
-				sendSlackNotification(fmt.Sprintf("Error getting checksum from database: %v", err))
+				LogWithDatetime(fmt.Sprintf("Error getting copied file checksum from database: %v", err), true)
+				sendSlackNotification(fmt.Sprintf("Error getting copied file checksum from database: %v", err))
 				return
 			}
 
@@ -284,11 +284,27 @@ func copyFileWithVerification(ctx context.Context, db *sql.DB, file, dir, destin
 				}
 			}
 
-			originalHash, err := CalculateFileHash(file)
+			var originalHash string
+			originalHash, err = GetOriginFileChecksum(db, file)
 			if err != nil {
-				LogWithDatetime(fmt.Sprintf("Error calculating hash for original file: %v", err), true)
-				sendSlackNotification(fmt.Sprintf("Error calculating hash for original file: %v", err))
+				LogWithDatetime(fmt.Sprintf("Error getting origin file checksum from database: %v", err), true)
+				sendSlackNotification(fmt.Sprintf("Error getting origin file checksum from database: %v", err))
 				return
+			}
+
+			if originalHash == "" {
+				originalHash, err = CalculateFileHash(file)
+				if err != nil {
+					LogWithDatetime(fmt.Sprintf("Error calculating hash for original file: %v", err), true)
+					sendSlackNotification(fmt.Sprintf("Error calculating hash for original file: %v", err))
+					return
+				}
+				err = UpdateFileChecksum(db, file, originalHash)
+				if err != nil {
+					LogWithDatetime(fmt.Sprintf("Error updating origin file checksum in database: %v", err), true)
+					sendSlackNotification(fmt.Sprintf("Error updating origin file checksum in database: %v", err))
+					return
+				}
 			}
 
 			if originalHash == destinationHash {
@@ -353,6 +369,9 @@ func copyFileWithVerification(ctx context.Context, db *sql.DB, file, dir, destin
 					sendSlackNotification(fmt.Sprintf("Finished copying file: %s", destPath))
 					dbMutex.Lock()
 					MarkFileAsCopied(db, file, destination, isFolder)
+					UpdateCopiedFileChecksum(db, file, destination, copiedHash)
+					SaveFileSize(db, file, fileSize, isFolder)
+					UpdateFileChecksum(db, file, originalHash)
 					dbMutex.Unlock()
 				}
 			} else {
