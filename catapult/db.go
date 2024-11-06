@@ -220,11 +220,14 @@ func UpdateCopiedFileSize(db *sql.DB, filePath, destination string, size int64) 
 }
 
 func GetCopiedFileSize(db *sql.DB, filePath, destination string) (int64, error) {
-	var size int64
+	var size sql.NullInt64
 	query := `SELECT size FROM copied_files WHERE file_path = ? AND destination = ?`
 	err := db.QueryRow(query, filePath, destination).Scan(&size)
-	if err == sql.ErrNoRows {
-		return -1, nil
+	if err != nil {
+		return -1, err
 	}
-	return size, err
+	if size.Valid {
+		return size.Int64, nil
+	}
+	return -1, nil
 }
