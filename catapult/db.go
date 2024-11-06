@@ -188,23 +188,29 @@ func UpdateCopiedFileChecksum(db *sql.DB, filePath, destination, checksum string
 }
 
 func GetOriginFileChecksum(db *sql.DB, filePath string) (string, error) {
-	var checksum string
+	var checksum sql.NullString
 	query := `SELECT checksum FROM file_sizes WHERE path = ?`
 	err := db.QueryRow(query, filePath).Scan(&checksum)
-	if err == sql.ErrNoRows {
-		return "", nil
+	if err != nil {
+		return "", err
 	}
-	return checksum, err
+	if checksum.Valid {
+		return checksum.String, nil
+	}
+	return "", nil
 }
 
 func GetCopiedFileChecksum(db *sql.DB, filePath, destination string) (string, error) {
-	var checksum string
+	var checksum sql.NullString
 	query := `SELECT checksum FROM copied_files WHERE file_path = ? AND destination = ?`
 	err := db.QueryRow(query, filePath, destination).Scan(&checksum)
-	if err == sql.ErrNoRows {
-		return "", nil
+	if err != nil {
+		return "", err
 	}
-	return checksum, err
+	if checksum.Valid {
+		return checksum.String, nil
+	}
+	return "", nil
 }
 
 func UpdateCopiedFileSize(db *sql.DB, filePath, destination string, size int64) error {

@@ -316,8 +316,7 @@ func copyFileWithVerification(ctx context.Context, db *sql.DB, file, dir, destin
 				}
 			}
 
-			var originalHash string
-			originalHash, err = GetOriginFileChecksum(db, file)
+			originalHash, err := GetOriginFileChecksum(db, file)
 			if err != nil {
 				LogWithDatetime(fmt.Sprintf("Error getting origin file checksum from database: %v", err), true)
 				sendSlackNotification(fmt.Sprintf("Error getting origin file checksum from database: %v", err))
