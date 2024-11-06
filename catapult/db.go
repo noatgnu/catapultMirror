@@ -191,6 +191,9 @@ func GetOriginFileChecksum(db *sql.DB, filePath string) (string, error) {
 	var checksum string
 	query := `SELECT checksum FROM file_sizes WHERE path = ?`
 	err := db.QueryRow(query, filePath).Scan(&checksum)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
 	return checksum, err
 }
 
@@ -198,6 +201,9 @@ func GetCopiedFileChecksum(db *sql.DB, filePath, destination string) (string, er
 	var checksum string
 	query := `SELECT checksum FROM copied_files WHERE file_path = ? AND destination = ?`
 	err := db.QueryRow(query, filePath, destination).Scan(&checksum)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
 	return checksum, err
 }
 
